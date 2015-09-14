@@ -1,0 +1,15 @@
+#*
+Other available variables:
+$varDict['org_url'] - Home URL of the organization
+$varDict['org_name'] - Organization name
+$varDict['filelockerURL'] - Root URL of this Filelocker instance
+*#
+To: $varDict['recipient']
+From: $sender
+Subject: A file has been uploaded to you on Filelocker
+
+Someone has uploaded the following file to you on Filelocker:
+
+$varDict['fileName']
+
+To access the file, login with your Filelocker account at $varDict['filelockerURL']
