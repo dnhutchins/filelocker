@@ -1,0 +1,51 @@
+---
+- hosts: all
+  sudo: True
+  roles:
+    - role: angstwad.docker_ubuntu
+    - role: jdauphant.ssl-certs
+    - role: jdauphant.nginx
+      nginx_sites:
+        default:
+          - listen 443 ssl
+          - server_name _
+          - location / { proxy_pass http://filelocker; }
+      nginx_configs:
+        proxy:
+          - proxy_set_header Host $host
+          - proxy_set_header X-Real-IP $remote_addr
+          - proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for
+          - proxy_set_header X-Forwarded-Proto $scheme
+          - proxy_read_timeout 90
+        upstream:
+          - upstream filelocker { server 127.0.0.1:8080 weight=10; }
+        ssl:
+          - ssl_certificate_key {{ssl_certs_privkey_path}}
+          - ssl_certificate     {{ssl_certs_cert_path}}
+  tasks:
+  - name: mariadb container
+    docker:
+      name: db-server
+      image: mariadb
+      state: started
+      env:
+        MYSQL_ROOT_PASSWORD=notverysecure
+  - name: filelocker container
+    docker:
+      name: app-server
+      image: dnhutchins/filelocker
+      state: started
+      links:
+      - "db-server:db-server"
+      ports:
+      - "127.0.0.1:8080:8080"
+  - shell: docker exec db-server sed -i '/skip-name-resolve/d' /etc/mysql/my.cnf
+  - shell: docker exec db-server sed -i '/skip-host-cache/d' /etc/mysql/my.cnf
+  - shell: docker exec db-server mysql -uroot -pnotverysecure -e "create database filelocker"
+  - shell: docker exec db-server mysql -uroot -pnotverysecure -e "grant all on filelocker.* to 'filelocker'@'app-server' identified by 'filelocker'"
+  - shell: docker exec db-server mysql -uroot -pnotverysecure -e "grant all on filelocker.* to 'filelocker'@'app-server.bridge' identified by 'filelocker'"
+  - shell: docker restart db-server
+  - shell: docker exec app-server sed -i 's/confirmPassword = getpass("Confirm password. ")/confirmPassword = "changeme"/g'  /opt/filelocker2/setup.py
+  - shell: docker exec app-server sed -i 's/password = getpass("Enter Admin password. ")/password = "changeme"/g' /opt/filelocker2/setup.py
+  - shell: docker exec app-server python /opt/filelocker2/setup.py -c /opt/filelocker2/etc/filelocker.conf -i
+  
